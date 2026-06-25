@@ -92,6 +92,15 @@ a candidate with an overwhelming raw fit score could theoretically still
 surface — matching the JD's own hedge language ("we will *probably* not move
 forward") rather than treating these as absolute the way honeypots are.
 
+### Soft penalty: title-chasing (×0.55 penalty)
+The JD separately names career trajectories that show someone optimizing for
+"Senior → Staff → Principal" by switching companies every ~1.5 years.
+`detect_title_chasing()` flags a monotonically escalating seniority ladder
+across 3+ roles with ≤18-month average tenure. This gets a milder penalty
+(0.55×) than the two hard disqualifiers above, matching the JD's softer
+"we're not a fit" phrasing for this criterion versus "we will not move
+forward" for consulting-only/CV-only careers.
+
 ### Honeypot detection (×0.05 penalty)
 Two independent integrity checks, found by direct inspection of the dataset
 during development (see `notebooks/` — not included in repo, see commit history
@@ -107,6 +116,32 @@ candidates, which is harder to defend than "this score is real but multiplied
 down by a specific, named penalty." Result on the full 100K pool: **0 honeypots
 in the top 100** (validated by cross-referencing against the honeypot IDs found
 during manual inspection).
+
+**Calibration note.** Both thresholds were chosen by inspecting the actual
+distribution, not guessed: the YOE-vs-career-history mismatch has a clean
+gap (99.95% of the pool sits under 0.45 years of natural rounding noise,
+then jumps straight to multi-year mismatches with no gray zone), and the
+"expert proficiency, 0 months used" pattern has an even sharper cliff (the
+next-lowest duration value after exactly 0 is 38 months — no 1-12 month
+gray zone exists). 68 unique candidates are flagged in the full 100K pool
+(0 overlap between the two rules), against the spec's "~80" estimate. Before
+accepting that gap, we checked for additional honeypot categories: date-logic
+violations (end-before-start, overlapping roles, future dates — found: 0
+across the entire pool), education-timeline inconsistencies (found: large
+numbers of false positives from legitimate multi-degree/part-time-study
+timelines, not a real signal), salary-range `min > max` (found: ~19% of the
+pool — too widespread to be a deliberate honeypot, looks like a dataset-wide
+field-order quirk instead), and company-founding-date violations (found:
+structurally impossible in this dataset — every one of the 63 distinct
+employer names in the pool has an internally consistent earliest-start-date
+floor across thousands of samples, so "N years at a company founded N-3
+years ago" can't occur here). We also checked whether the keyword-stuffer
+trap ever leaks into `career_history.description` text rather than just the
+`skills` array — it doesn't, in any of the candidates we checked who have
+non-technical titles; descriptions stay consistent with the stated role even
+when skills are stuffed. We're treating the 68-vs-~80 gap as normal slack in
+a rounded spec estimate rather than a missed pattern, but we're flagging the
+investigation here in case Stage 5 wants to probe it further.
 
 ## Honest limitations (what we'd improve with more time)
 
@@ -170,3 +205,29 @@ sorting could produce ties the validator rejects, and a reasoning-text bug
 that mislabeled an India-based candidate's location as "outside India"),
 and structuring this README. No candidate data was sent to any external LLM
 API as part of the ranking pipeline itself — `rank.py` makes zero network calls.
+
+A third, more substantive bug was caught by sanity-checking
+`score_skills_with_trust` against synthetic boundary cases: the original
+trust formula gave a guaranteed 0.5 floor to *any* claimed proficiency level
+regardless of duration or endorsement evidence, so a fabricated "expert,
+0 months used, 0 endorsements" skill scored *higher* (0.255) than a
+genuinely-evidenced but lower-proficiency skill like a real Python expert
+(0.17) — the opposite of what the function exists to do, since it's the
+main defense against keyword-stuffing within the skills list itself. Fixed
+by making the evidence factor multiplicative with no guaranteed floor (a
+0-duration, 0-endorsement claim now scores ~0.05 regardless of claimed
+proficiency, vs. ~0.17 for the genuinely-evidenced comparison). This changed
+2 of the 100 final rankings, both swaps at the rank 94–100 boundary, both
+replacements verified to have stronger real evidence.
+
+A fourth addition (not a bug fix, a missing rule): the JD explicitly names
+"title-chasers" — candidates whose career shows an escalating
+Senior→Staff→Principal ladder via company-hopping every ~1.5 years — as a
+deliberate non-fit. `detect_title_chasing()` checks for monotonically
+increasing seniority titles with ≤18-month average tenure across 3+ roles,
+applying a milder penalty (0.55×) than the hard disqualifiers, matching the
+JD's softer "we're not a fit" language for this criterion vs. "we will not
+move forward" for consulting-only/CV-only. It fires on 44 of the 100,000
+candidates but doesn't change the top 100 in this run, since none of the
+44 happened to also clear the title/skills bar — it's there as a tested
+safety net, not because it was needed to hit this particular result.

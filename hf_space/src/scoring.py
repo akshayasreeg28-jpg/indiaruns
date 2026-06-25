@@ -120,7 +120,18 @@ def extract_features(c: dict) -> CandidateFeatures:
         skill_meta=skill_meta,
         career_titles=[ch.get("title", "") for ch in career],
         career_companies=[ch.get("company", "") for ch in career],
-        career_descriptions=" ".join(ch.get("description", "") for ch in career).lower(),
+        # dict.fromkeys preserves order while dropping exact-duplicate
+        # description strings. ~36% of the dataset has career_history
+        # entries with verbatim-repeated descriptions (a synthetic-data
+        # generation artifact, confirmed not correlated with title/tier —
+        # see dev notes). Presence-based keyword scoring downstream means
+        # this dedup currently has zero effect on any top-100 score, but we
+        # do it anyway so that's true by construction, not by coincidence —
+        # if the scoring function is ever changed to be count-based, this
+        # guards against silently double-counting repeated text.
+        career_descriptions=" ".join(
+            dict.fromkeys(ch.get("description", "") for ch in career)
+        ).lower(),
         redrob=c.get("redrob_signals", {}),
         profile=p,
     )
@@ -140,9 +151,16 @@ def detect_honeypot(c: dict, feat: CandidateFeatures) -> list[str]:
             reasons.append(f"expert-claimed/0mo:{name}")
 
     # 2. years_of_experience grossly inconsistent with summed career_history duration.
+    #    Threshold calibrated against the actual pool distribution, not guessed:
+    #    99.95% of all 100K candidates have a mismatch under 0.45 years (normal
+    #    rounding noise), then the distribution jumps straight to multi-year gaps
+    #    with no gray zone in between. 1.0 sits safely above the noise ceiling and
+    #    safely below the next real cluster (the closest two real candidates above
+    #    the noise ceiling sit at 1.92 and 2.08 years — see README "Calibration
+    #    note" for the full distribution check).
     total_months = sum(ch.get("duration_months", 0) for ch in c.get("career_history", []))
     total_years = total_months / 12.0
-    if feat.yoe > 0 and abs(total_years - feat.yoe) > 2.5:
+    if feat.yoe > 0 and abs(total_years - feat.yoe) > 1.0:
         reasons.append(f"yoe-mismatch:stated={feat.yoe},history={round(total_years,1)}")
 
     # 3. Any single career entry implausibly long relative to total stated YOE
@@ -181,8 +199,46 @@ def hard_disqualifiers(feat: CandidateFeatures) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Component scores (each returns 0.0-1.0)
+# Soft penalty: "title-chasing" (JD names this explicitly, but with softer
+# language than the hard disqualifiers above — "we're not a fit" rather than
+# "we will not move forward" — so this gets its own, milder penalty multiplier
+# in rank.py rather than sharing the hard-disqualifier penalty).
 # ---------------------------------------------------------------------------
+
+_SENIORITY_RANK = {"junior": 0, "senior": 2, "staff": 3, "principal": 4, "lead": 3, "head": 4, "director": 4}
+
+
+def _seniority_level(title: str) -> int:
+    t = title.lower()
+    for kw, rank in sorted(_SENIORITY_RANK.items(), key=lambda kv: -kv[1]):
+        if kw in t:
+            return rank
+    return 1  # unmarked / mid-level
+
+
+def detect_title_chasing(c: dict, feat: CandidateFeatures) -> bool:
+    """
+    True if career_history shows a monotonically escalating seniority ladder
+    (junior/mid -> senior -> staff/principal) with short average tenure
+    (<=18 months/role) across 3+ roles — the JD's own description of a
+    "title-chaser": someone optimizing for title growth via company-hopping
+    rather than staying anywhere long enough to own outcomes.
+    """
+    career = c.get("career_history", [])
+    if len(career) < 3:
+        return False
+
+    # career_history is most-recent-first in this dataset; reverse to get
+    # chronological order so "escalating" means earliest -> latest.
+    chrono = list(reversed(career))
+    levels = [_seniority_level(r.get("title", "")) for r in chrono]
+    tenures = [r.get("duration_months", 0) for r in chrono]
+
+    monotonic = all(levels[i] <= levels[i + 1] for i in range(len(levels) - 1))
+    actually_escalated = levels[-1] > levels[0]
+    avg_tenure = sum(tenures) / len(tenures) if tenures else 0
+
+    return monotonic and actually_escalated and avg_tenure <= 18
 
 def score_title_fit(feat: CandidateFeatures) -> float:
     t = feat.title_lower
@@ -239,8 +295,21 @@ def score_skills_with_trust(feat: CandidateFeatures) -> float:
         prof_w = {"beginner": 0.4, "intermediate": 0.65, "advanced": 0.85, "expert": 1.0}.get(prof, 0.4)
         dur_w = min(dur / 24.0, 1.0)  # 2 years = full credit
         end_w = min(end / 10.0, 1.0)  # 10 endorsements = full credit
-        # an "expert" skill with no duration/endorsement backing is heavily discounted
-        return prof_w * (0.5 + 0.3 * dur_w + 0.2 * end_w)
+        # Evidence factor is multiplicative and has NO floor: a skill with
+        # 0 duration and 0 endorsements yields evidence=0 regardless of
+        # claimed proficiency, so an "expert" claim backed by nothing scores
+        # ~0, not ~0.5. This was a real bug we caught in review — the
+        # original formula (prof_w * (0.5 + 0.3*dur_w + 0.2*end_w)) gave a
+        # guaranteed 0.5 floor to *any* claimed proficiency level, so a
+        # keyword-stuffed "expert, 0mo, 0 endorsements" skill scored higher
+        # than a genuinely-evidenced lower-proficiency skill — the opposite
+        # of what this function exists to do. Evidence now needs at least
+        # *some* duration or endorsement backing to earn meaningful credit;
+        # a small floor (0.1) remains so a freshly-started but real skill
+        # (1 month in, 0 endorsements yet) isn't scored identically to a
+        # total fabrication, since both would otherwise round to ~0.
+        evidence = 0.1 + 0.9 * max(dur_w, end_w)
+        return prof_w * evidence
 
     embed_score = max((trust(s) for s in EMBEDDING_RETRIEVAL_SKILLS if s in feat.skills), default=0.0)
     vecdb_score = max((trust(s) for s in VECTOR_DB_SKILLS if s in feat.skills), default=0.0)

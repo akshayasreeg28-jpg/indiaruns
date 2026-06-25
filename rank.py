@@ -36,7 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.scoring import (
-    extract_features, detect_honeypot, hard_disqualifiers,
+    extract_features, detect_honeypot, hard_disqualifiers, detect_title_chasing,
     score_title_fit, score_career_substance, score_skills_with_trust,
     score_experience_band, score_location, score_behavioral_multiplier,
 )
@@ -56,12 +56,14 @@ WEIGHTS = {
 
 HONEYPOT_PENALTY = 0.05   # multiply score by this if any honeypot flag fires
 DISQUALIFIER_PENALTY = 0.15  # multiply score by this if any hard disqualifier fires
+TITLE_CHASER_PENALTY = 0.55  # milder penalty — JD's tone here is "not a fit" not "will not move forward"
 
 
 def score_candidate(c: dict) -> dict:
     feat = extract_features(c)
     honeypot = detect_honeypot(c, feat)
     disq = hard_disqualifiers(feat)
+    title_chaser = detect_title_chasing(c, feat)
 
     comp = {
         "title_fit": score_title_fit(feat),
@@ -79,6 +81,8 @@ def score_candidate(c: dict) -> dict:
         final *= HONEYPOT_PENALTY
     if disq:
         final *= DISQUALIFIER_PENALTY
+    if title_chaser:
+        final *= TITLE_CHASER_PENALTY
 
     final = max(0.0, min(final, 1.0))
 
@@ -89,6 +93,7 @@ def score_candidate(c: dict) -> dict:
         "components": comp,
         "honeypot": honeypot,
         "disqualifiers": disq,
+        "title_chaser": title_chaser,
     }
 
 
@@ -138,7 +143,7 @@ def main():
         writer = csv.writer(f)
         writer.writerow(["candidate_id", "rank", "score", "reasoning"])
         for i, r in enumerate(top, start=1):
-            reasoning = build_reasoning(r["feat"], r["components"], r["honeypot"], r["disqualifiers"])
+            reasoning = build_reasoning(r["feat"], r["components"], r["honeypot"], r["disqualifiers"], r["title_chaser"])
             writer.writerow([r["candidate_id"], i, f"{r['score']:.4f}", reasoning])
 
     elapsed = time.time() - t0

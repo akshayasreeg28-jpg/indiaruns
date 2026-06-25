@@ -26,7 +26,7 @@ def _present_skills(feat: CandidateFeatures, pool: set) -> list:
     return sorted(s for s in pool if s in feat.skills)
 
 
-def build_reasoning(feat: CandidateFeatures, scores: dict, honeypot: list, disq: list) -> str:
+def build_reasoning(feat: CandidateFeatures, scores: dict, honeypot: list, disq: list, title_chaser: bool = False) -> str:
     parts = []
 
     # Lead with title + company + YOE (always true, always specific)
@@ -80,6 +80,8 @@ def build_reasoning(feat: CandidateFeatures, scores: dict, honeypot: list, disq:
     # hiding it would contradict a low rank, which Stage 4 explicitly checks.
     if disq:
         parts.append(f"flagged: {', '.join(disq)}")
+    if title_chaser:
+        parts.append("title-escalation pattern: short average tenure with rising seniority titles across roles")
     if honeypot:
         parts.append(f"DATA INTEGRITY FLAG ({honeypot[0]})")
 

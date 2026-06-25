@@ -15,7 +15,7 @@ import gradio as gr
 import pandas as pd
 
 from src.scoring import (
-    extract_features, detect_honeypot, hard_disqualifiers,
+    extract_features, detect_honeypot, hard_disqualifiers, detect_title_chasing,
     score_title_fit, score_career_substance, score_skills_with_trust,
     score_experience_band, score_location, score_behavioral_multiplier,
 )
@@ -30,12 +30,14 @@ WEIGHTS = {
 }
 HONEYPOT_PENALTY = 0.05
 DISQUALIFIER_PENALTY = 0.15
+TITLE_CHASER_PENALTY = 0.55
 
 
 def score_candidate(c: dict) -> dict:
     feat = extract_features(c)
     honeypot = detect_honeypot(c, feat)
     disq = hard_disqualifiers(feat)
+    title_chaser = detect_title_chasing(c, feat)
 
     comp = {
         "title_fit": score_title_fit(feat),
@@ -51,11 +53,14 @@ def score_candidate(c: dict) -> dict:
         final *= HONEYPOT_PENALTY
     if disq:
         final *= DISQUALIFIER_PENALTY
+    if title_chaser:
+        final *= TITLE_CHASER_PENALTY
     final = round(max(0.0, min(final, 1.0)), 4)
 
     return {
         "candidate_id": feat.candidate_id, "score": final, "feat": feat,
         "components": comp, "honeypot": honeypot, "disqualifiers": disq,
+        "title_chaser": title_chaser,
     }
 
 
@@ -81,7 +86,7 @@ def rank_file(file_obj, top_n):
 
     rows = []
     for i, r in enumerate(top, start=1):
-        reasoning = build_reasoning(r["feat"], r["components"], r["honeypot"], r["disqualifiers"])
+        reasoning = build_reasoning(r["feat"], r["components"], r["honeypot"], r["disqualifiers"], r["title_chaser"])
         rows.append({"rank": i, "candidate_id": r["candidate_id"], "score": r["score"], "reasoning": reasoning})
 
     df = pd.DataFrame(rows)

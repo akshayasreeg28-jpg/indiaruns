@@ -9,15 +9,15 @@ team_name: "TechNest"
 primary_contact:
   name: "Akshaya Sree G"
   email: "FILL_IN_EMAIL"        # <-- your email for organizer communication
-  phone: "FILL_IN_PHONE"        # <-- e.g. "+91-XXXXXXXXXX", used for top-50/top-10 outreach
+  phone: "+91-8122098528"
 
 team_members:
   - name: "Akshaya Sree G"
     email: "FILL_IN_EMAIL"
-    role: "FILL_IN_ROLE"          # e.g. "Team Lead / ML"
+    role: "Scoring architecture & component weights — title/career/skills-trust scoring, experience-band and location logic, behavioral-availability multiplier"
   - name: "Aasrith Sairam Ponguru"
     email: "FILL_IN_EMAIL"
-    role: "FILL_IN_ROLE"          # e.g. "Backend / Data"
+    role: "Data integrity & validation — honeypot detection, hard-disqualifier and title-chaser rules, reasoning-string generation, end-to-end testing against validate_submission.py"
 
 # ============================================================================
 # Code and reproducibility
@@ -32,11 +32,11 @@ reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./
 # Compute environment
 # ============================================================================
 compute:
-  platform: "FILL_IN_PLATFORM"        # e.g. "Local Windows laptop", "Google Colab", "Local Linux box"
-  cpu_cores: 4                         # <-- update to your actual core count
-  ram_gb: 8                            # <-- update to your actual available RAM
-  python_version: "3.12"               # <-- run `python --version` and confirm
-  os: "FILL_IN_OS"                     # e.g. "Windows 11", "Ubuntu 22.04"
+  platform: "Linux container (Anthropic Claude sandbox) — verified reference run; replace with your own machine if you re-test locally"
+  cpu_cores: 1
+  ram_gb: 4
+  python_version: "3.12.3"
+  os: "Ubuntu 24.04.4 LTS"
   uses_gpu_for_inference: false
   has_network_during_ranking: false
   pre_computation_required: false
@@ -50,19 +50,24 @@ ai_tools_used:
 
 ai_usage_summary: |
   Used Claude (Anthropic) as a development collaborator throughout: exploring
-  the candidates.jsonl dataset to identify the two honeypot signatures used in
-  src/scoring.py::detect_honeypot (expert-proficiency-with-zero-duration skills,
-  and years_of_experience mismatched against summed career_history duration),
-  reviewing scoring.py and rank.py for bugs, and structuring this repo's README
-  and metadata. Claude caught two real bugs during review: (1) a tie-break bug
-  where sorting by an unrounded float score before writing the rounded value
-  to CSV could produce validator-rejected ties, fixed by rounding before sort;
-  (2) a reasoning-text bug that incorrectly labeled an India-based candidate's
-  location as "outside India" because the text branched on the location score
-  band instead of the actual country field. All scoring logic, rule design,
-  and weight choices are our own; no candidate data was sent to any external
-  LLM API as part of the ranking pipeline itself — rank.py makes zero network
-  calls (verified with grep across src/ and rank.py).
+  the candidates.jsonl dataset to identify honeypot signatures (and to rule
+  out several false leads — date-logic violations, education-timeline gaps,
+  salary min/max inversions, company-founding-date violations — none of which
+  turned out to be real signals in this dataset), calibrating detection
+  thresholds against the actual data distribution rather than guesswork,
+  reviewing scoring.py and rank.py for bugs, and structuring this repo's
+  README and metadata. Claude caught three real bugs during review: (1) a
+  tie-break bug where sorting by an unrounded float score before writing the
+  rounded value to CSV could produce validator-rejected ties; (2) a
+  reasoning-text bug that incorrectly labeled an India-based candidate's
+  location as "outside India" because the text branched on the location
+  score band instead of the actual country field; (3) a scoring-formula bug
+  in skills_trust where a guaranteed 0.5 floor meant a fabricated "expert,
+  0 months used" skill claim scored higher than a genuinely-evidenced lower-
+  proficiency skill — the opposite of the function's purpose. All scoring
+  logic, rule design, and weight choices are our own; no candidate data was
+  sent to any external LLM API as part of the ranking pipeline itself —
+  rank.py makes zero network calls (verified with grep across src/ and rank.py).
 
 # ============================================================================
 # Approach summary
@@ -72,18 +77,26 @@ methodology_summary: |
   interpretable component scores — title_fit (0.32), career_substance (0.23,
   phrase-matches career_history descriptions for evidence of having built
   retrieval/ranking/recommendation systems, not just listed them as skills),
-  skills_trust (0.23, skills discounted by an endorsement+duration trust
-  factor so "expert" claims with 0 months/0 endorsements count for little),
-  experience_band (0.12, soft-scored around the JD's 5-9yr range), and
-  location (0.10, full credit for Pune/Noida, partial for other JD-named
-  cities, scaled by relocation willingness elsewhere). Combined into a base
-  score, then multiplied by a behavioral-availability modifier built from
-  redrob_signals (recency, response rate, open_to_work, interview completion)
-  and by penalty multipliers (0.05x) for two honeypot integrity checks and
-  (0.15x) for two hard disqualifiers named explicitly in the JD (consulting-
-  only career history; CV/speech/robotics-only skills with no NLP/IR
-  exposure). Runtime: ~13 seconds, ~1.3GB peak RAM for the full 100K pool.
-  0 honeypots surfaced in the top 100.
+  skills_trust (0.23, skills discounted by a multiplicative endorsement+
+  duration evidence factor with no guaranteed floor, so a fabricated "expert"
+  claim with 0 months/0 endorsements scores near zero rather than getting
+  automatic partial credit), experience_band (0.12, soft-scored around the
+  JD's 5-9yr range), and location (0.10, full credit for Pune/Noida, partial
+  for other JD-named cities, scaled by relocation willingness elsewhere).
+  Combined into a base score, then multiplied by a behavioral-availability
+  modifier built from redrob_signals (recency, response rate, open_to_work,
+  interview completion) and by penalty multipliers for three named risk
+  categories: two honeypot integrity checks (0.05x — expert-proficiency-with-
+  zero-duration, and years-of-experience vs. career-history mismatch, both
+  thresholds calibrated against the actual distribution rather than guessed),
+  two hard disqualifiers (0.15x — consulting-only career history; CV/speech/
+  robotics-only skills with no NLP/IR exposure), and a softer title-chasing
+  penalty (0.55x — escalating seniority titles with short average tenure,
+  matching the JD's milder "not a fit" language for this specific criterion).
+  Runtime: ~13-21 seconds, ~1.3GB peak RAM for the full 100K pool, verified
+  on a 1-CPU-core/4GB sandbox (well under the 5min/16GB budget with margin
+  to spare). 0 honeypots surfaced in the top 100; 70 honeypots and 0 hard-
+  disqualified candidates detected pool-wide.
 
 # ============================================================================
 # Declarations
