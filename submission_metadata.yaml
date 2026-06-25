@@ -4,17 +4,20 @@
 # ============================================================================
 # Team identity
 # ============================================================================
-team_name: "FILL_IN_TEAM_NAME"  # <-- replace with your chosen team name
+team_name: "TechNest"
 
 primary_contact:
-  name: "Akshaya Sree"
+  name: "Akshaya Sree G"
   email: "FILL_IN_EMAIL"        # <-- your email for organizer communication
   phone: "FILL_IN_PHONE"        # <-- e.g. "+91-XXXXXXXXXX", used for top-50/top-10 outreach
 
 team_members:
-  - name: "Akshaya Sree"
+  - name: "Akshaya Sree G"
     email: "FILL_IN_EMAIL"
-    role: "Solo participant — Data/ML"
+    role: "FILL_IN_ROLE"          # e.g. "Team Lead / ML"
+  - name: "Aasrith Sairam Ponguru"
+    email: "FILL_IN_EMAIL"
+    role: "FILL_IN_ROLE"          # e.g. "Backend / Data"
 
 # ============================================================================
 # Code and reproducibility
@@ -57,7 +60,7 @@ ai_usage_summary: |
   (2) a reasoning-text bug that incorrectly labeled an India-based candidate's
   location as "outside India" because the text branched on the location score
   band instead of the actual country field. All scoring logic, rule design,
-  and weight choices are my own; no candidate data was sent to any external
+  and weight choices are our own; no candidate data was sent to any external
   LLM API as part of the ranking pipeline itself — rank.py makes zero network
   calls (verified with grep across src/ and rank.py).
 

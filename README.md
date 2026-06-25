@@ -1,6 +1,6 @@
 # Redrob Hackathon — Intelligent Candidate Discovery & Ranking
 
-Solo submission. Ranks the top 100 candidates from a 100,000-candidate pool
+Team **TechNest** (Akshaya Sree G, Aasrith Sairam Ponguru). Ranks the top 100 candidates from a 100,000-candidate pool
 against the **Senior AI Engineer — Founding Team** job description, with
 per-candidate reasoning.
 
@@ -108,14 +108,14 @@ down by a specific, named penalty." Result on the full 100K pool: **0 honeypots
 in the top 100** (validated by cross-referencing against the honeypot IDs found
 during manual inspection).
 
-## Honest limitations (what I'd improve with more time)
+## Honest limitations (what we'd improve with more time)
 
 - **Phrase matching beats true semantic understanding.** `career_substance`
   is keyword/phrase-based, so a candidate who describes the exact same work
   with very different vocabulary could be under-scored. The natural fix is a
   small, locally-run sentence-transformers model (still CPU-only, still no
   network) to get a JD–career-history similarity feature as an additional
-  signal — this is the first thing I'd add given more time.
+  signal — this is the first thing we'd add given more time.
 - **Disqualifier rules are necessarily approximate.** "Consulting-only career"
   and "CV/speech-only" are pattern matches against the JD's explicit language,
   not a learned model — they will have false positives/negatives at the margins.
