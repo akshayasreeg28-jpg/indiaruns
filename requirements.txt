@@ -1,0 +1,5 @@
+# No third-party dependencies — rank.py uses only the Python standard library
+# (json, csv, argparse, pathlib, dataclasses, datetime, re).
+# This is intentional: see README.md "Why rule-based, not embeddings/an LLM".
+#
+# Python version: 3.10+

@@ -1,0 +1,93 @@
+# Redrob Hackathon — Submission Metadata
+# (filled from submission_metadata_template.yaml)
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "FILL_IN_TEAM_NAME"  # <-- replace with your chosen team name
+
+primary_contact:
+  name: "Akshaya Sree"
+  email: "FILL_IN_EMAIL"        # <-- your email for organizer communication
+  phone: "FILL_IN_PHONE"        # <-- e.g. "+91-XXXXXXXXXX", used for top-50/top-10 outreach
+
+team_members:
+  - name: "Akshaya Sree"
+    email: "FILL_IN_EMAIL"
+    role: "Solo participant — Data/ML"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "FILL_IN_GITHUB_URL"   # <-- e.g. https://github.com/akshayasree/redrob-ranker
+
+sandbox_link: "FILL_IN_HF_SPACE_URL"  # <-- e.g. https://huggingface.co/spaces/akshayasree/redrob-ranker
+
+reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv"
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "FILL_IN_PLATFORM"        # e.g. "Local Windows laptop", "Google Colab", "Local Linux box"
+  cpu_cores: 4                         # <-- update to your actual core count
+  ram_gb: 8                            # <-- update to your actual available RAM
+  python_version: "3.12"               # <-- run `python --version` and confirm
+  os: "FILL_IN_OS"                     # e.g. "Windows 11", "Ubuntu 22.04"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: false
+  pre_computation_time_minutes: 0
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Claude"
+
+ai_usage_summary: |
+  Used Claude (Anthropic) as a development collaborator throughout: exploring
+  the candidates.jsonl dataset to identify the two honeypot signatures used in
+  src/scoring.py::detect_honeypot (expert-proficiency-with-zero-duration skills,
+  and years_of_experience mismatched against summed career_history duration),
+  reviewing scoring.py and rank.py for bugs, and structuring this repo's README
+  and metadata. Claude caught two real bugs during review: (1) a tie-break bug
+  where sorting by an unrounded float score before writing the rounded value
+  to CSV could produce validator-rejected ties, fixed by rounding before sort;
+  (2) a reasoning-text bug that incorrectly labeled an India-based candidate's
+  location as "outside India" because the text branched on the location score
+  band instead of the actual country field. All scoring logic, rule design,
+  and weight choices are my own; no candidate data was sent to any external
+  LLM API as part of the ranking pipeline itself — rank.py makes zero network
+  calls (verified with grep across src/ and rank.py).
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Rule-based ranker, no embeddings/LLM calls, pure Python stdlib. Five
+  interpretable component scores — title_fit (0.32), career_substance (0.23,
+  phrase-matches career_history descriptions for evidence of having built
+  retrieval/ranking/recommendation systems, not just listed them as skills),
+  skills_trust (0.23, skills discounted by an endorsement+duration trust
+  factor so "expert" claims with 0 months/0 endorsements count for little),
+  experience_band (0.12, soft-scored around the JD's 5-9yr range), and
+  location (0.10, full credit for Pune/Noida, partial for other JD-named
+  cities, scaled by relocation willingness elsewhere). Combined into a base
+  score, then multiplied by a behavioral-availability modifier built from
+  redrob_signals (recency, response rate, open_to_work, interview completion)
+  and by penalty multipliers (0.05x) for two honeypot integrity checks and
+  (0.15x) for two hard disqualifiers named explicitly in the JD (consulting-
+  only career history; CV/speech/robotics-only skills with no NLP/IR
+  exposure). Runtime: ~13 seconds, ~1.3GB peak RAM for the full 100K pool.
+  0 honeypots surfaced in the top 100.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true
+  reproduction_tested: true

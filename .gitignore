@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.egg-info/
+
+# Dataset is NOT committed to the repo — see README.md "Data" section.
+# Organizers already have candidates.jsonl; committing a 465MB file would
+# blow past GitHub's 100MB hard limit anyway.
+data/candidates.jsonl
+data/candidates.jsonl.gz
