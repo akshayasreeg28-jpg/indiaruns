@@ -15,7 +15,7 @@ team_members:
   - name: "Akshaya Sree G"
     email: "akshayasreeg28@gmail.com"
     role: "Scoring architecture & component weights — title/career/skills-trust scoring, experience-band and location logic, behavioral-availability multiplier"
-  - name: "Aasrith Sairam Ponguru"
+  - name: "Ponguru Aasrith Sairam"
     email: "aasrith09@gmail.com"
     role: "Data integrity & validation — honeypot detection, hard-disqualifier and title-chaser rules, reasoning-string generation, end-to-end testing against validate_submission.py"
 
