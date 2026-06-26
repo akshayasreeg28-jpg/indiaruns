@@ -12,7 +12,7 @@ pinned: false
 # Redrob Hackathon — Candidate Ranker Sandbox
 
 Small-sample sandbox demo for the full submission at:
-https://github.com/YOUR_USERNAME/YOUR_REPO
+https://github.com/akshayasreeg28-jpg/indiaruns
 
 Runs the exact same `src/scoring.py` + `src/reasoning.py` logic used to
 produce the competition `submission.csv`, scoped to an 80-candidate sample

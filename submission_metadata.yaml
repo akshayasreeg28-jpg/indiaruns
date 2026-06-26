@@ -8,23 +8,23 @@ team_name: "TechNest"
 
 primary_contact:
   name: "Akshaya Sree G"
-  email: "FILL_IN_EMAIL"        # <-- your email for organizer communication
+  email: "akshayasreeg28@gmail.com"
   phone: "+91-8122098528"
 
 team_members:
   - name: "Akshaya Sree G"
-    email: "FILL_IN_EMAIL"
+    email: "akshayasreeg28@gmail.com"
     role: "Scoring architecture & component weights — title/career/skills-trust scoring, experience-band and location logic, behavioral-availability multiplier"
   - name: "Aasrith Sairam Ponguru"
-    email: "FILL_IN_EMAIL"
+    email: "aasrith09@gmail.com"
     role: "Data integrity & validation — honeypot detection, hard-disqualifier and title-chaser rules, reasoning-string generation, end-to-end testing against validate_submission.py"
 
 # ============================================================================
 # Code and reproducibility
 # ============================================================================
-github_repo: "FILL_IN_GITHUB_URL"   # <-- e.g. https://github.com/akshayasree/redrob-ranker
+github_repo: "https://github.com/akshayasreeg28-jpg/indiaruns"
 
-sandbox_link: "FILL_IN_HF_SPACE_URL"  # <-- e.g. https://huggingface.co/spaces/akshayasree/redrob-ranker
+sandbox_link: "FILL_IN_HF_SPACE_URL"  # <-- fill once you deploy the hf_space/ folder to a HuggingFace Space
 
 reproduce_command: "python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv"
 
