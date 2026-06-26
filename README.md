@@ -62,7 +62,7 @@ iteration; see "Honest limitations" below.
 
 | Component | Weight | What it captures |
 |---|---|---|
-| `title_fit` | 0.32 | Is the current title actually AI/ML/data, not an adjacent or unrelated role with AI keywords bolted onto the skills list. Heaviest weight — this is the direct defense against the "keyword stuffer" trap named in the hackathon README. |
+| `title_fit` | 0.32 | Is the current title actually AI/ML/data, not an adjacent or unrelated role with AI keywords bolted onto the skills list. Heaviest weight — this is the direct defense against the "keyword stuffer" trap named in the hackathon README. Three tiers below "core": adjacent titles (Software/Data/Backend/Analytics Engineer, Data Analyst), AI-titled-but-wrong-specialization (AI Specialist, Computer Vision Engineer — real ML work, just not retrieval/NLP), and everything else. |
 | `career_substance` | 0.23 | Keyword/phrase hits inside `career_history[].description` (e.g. "embedding", "retrieval", "production", "A/B test") — rewards candidates who *describe having built* the JD's core systems, not just listed them as skills. |
 | `skills_trust` | 0.23 | Skills score discounted by an endorsement+duration "trust" factor, so a skill claimed at `expert` with 0 months used / 0 endorsements counts far less than the same skill backed by real tenure. Weighted toward the JD's "things you absolutely need" (embeddings, vector DB, Python, eval frameworks) over "nice to have" (fine-tuning, learning-to-rank). |
 | `experience_band` | 0.12 | Soft scoring around the JD's 5–9 yr band, full credit in-band, partial credit just outside it (the JD itself says the band is "a range, not a requirement"). |
@@ -142,6 +142,39 @@ non-technical titles; descriptions stay consistent with the stated role even
 when skills are stuffed. We're treating the 68-vs-~80 gap as normal slack in
 a rounded spec estimate rather than a missed pattern, but we're flagging the
 investigation here in case Stage 5 wants to probe it further.
+
+## Title classification audit
+
+The dataset uses a **fixed, finite vocabulary of 49 distinct job titles**
+(not freeform text), which let us check `score_title_fit` exhaustively
+against every title actually present rather than guessing at coverage. This
+caught a real bug: "AI Specialist" (130 candidates) and "Computer Vision
+Engineer" (132 candidates) — both genuine AI/ML titles — were falling
+through to the same 0.05 floor as "Civil Engineer" and "HR Manager", because
+neither title contains any of our `CORE_TITLES` as a substring. Manual
+inspection confirmed real candidates were affected: e.g. an "AI Specialist"
+at Mad Street Den with Pinecone, Semantic Search, Vector Search, and
+Information Retrieval in their skills list was scoring identically to a
+keyword-stuffer. Fixed by adding an explicit `AI_ADJACENT_WRONG_SPECIALIZATION_TITLES`
+tier (0.40 base, 0.65 if career history shows retrieval/NLP work despite the
+title) and adding "Data Analyst" to `ADJACENT_TITLES` (it was inconsistently
+excluded while "Data Engineer" and "Analytics Engineer" were included).
+Result: 3 of the 100 final rankings changed, all three new entrants verified
+to be genuine embeddings/vector-search practitioners; all three displaced
+candidates were sitting at the rank 98–100 boundary with near-identical
+scores, not collateral damage.
+
+We also explicitly checked the reverse risk — whether gating the *adjacent*
+tier's bonus credit on career-history keywords (rather than just skills)
+was unfairly burying strong candidates whose skills list looks good but
+whose career narrative doesn't mention it. Checked all 142 "Senior Software
+Engineer (ML)" candidates: 91 have embeddings/vector-DB skills listed but
+stay at the lower tier. Manually inspected several — in every case checked,
+their actual career-history description was computer vision, fraud
+detection, or time-series forecasting work, with the relevant skill present
+only as a listed keyword, not work they describe having done. This matches
+the keyword-stuffer pattern (skill claimed, not evidenced) rather than a
+true negative, so no change was made here — the gate is working as intended.
 
 ## Honest limitations (what we'd improve with more time)
 

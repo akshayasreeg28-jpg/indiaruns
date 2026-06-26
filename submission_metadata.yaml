@@ -64,7 +64,13 @@ ai_usage_summary: |
   score band instead of the actual country field; (3) a scoring-formula bug
   in skills_trust where a guaranteed 0.5 floor meant a fabricated "expert,
   0 months used" skill claim scored higher than a genuinely-evidenced lower-
-  proficiency skill — the opposite of the function's purpose. All scoring
+  proficiency skill — the opposite of the function's purpose; (4) a title-
+  classification gap, found by exhaustively checking score_title_fit against
+  every one of the dataset's 49 distinct job titles (a fixed vocabulary, not
+  freeform text) — "AI Specialist" and "Computer Vision Engineer" were
+  falling to the same 0.05 floor as unrelated titles like "Civil Engineer",
+  burying real AI/ML practitioners. Fixed with a new title tier; verified
+  the 3 resulting ranking changes were genuine improvements. All scoring
   logic, rule design, and weight choices are our own; no candidate data was
   sent to any external LLM API as part of the ranking pipeline itself —
   rank.py makes zero network calls (verified with grep across src/ and rank.py).

@@ -37,7 +37,22 @@ CORE_TITLES = {
 
 ADJACENT_TITLES = {
     "software engineer", "senior software engineer", "backend engineer",
-    "data engineer", "analytics engineer", "research scientist",
+    "data engineer", "analytics engineer", "research scientist", "data analyst",
+}
+
+# AI/ML-titled, but the JD's specific specialization (retrieval/ranking/NLP)
+# isn't implied by the title alone — e.g. "AI Specialist" is vague and could
+# be CV/speech/anything, "Computer Vision Engineer" is real ML work in the
+# wrong sub-domain. These deserve more than the 0.05 floor we give to
+# genuinely unrelated titles (Civil Engineer, HR Manager, etc.) — that floor
+# was a real scoring bug we caught by exhaustively checking title_fit against
+# every distinct title actually present in the dataset: a real, employed AI
+# practitioner with this title was scoring identically to a keyword-stuffer.
+# Their actual fit still has to be earned through career_substance and
+# skills_trust (which read the real evidence), this just stops the title
+# itself from being a false negative.
+AI_ADJACENT_WRONG_SPECIALIZATION_TITLES = {
+    "ai specialist", "computer vision engineer",
 }
 
 # Things the JD says are NOT a fit regardless of skills list
@@ -252,6 +267,16 @@ def score_title_fit(feat: CandidateFeatures) -> float:
                ("machine learning", "ml model", "embedding", "retrieval", "ranking", "recommendation")):
             return 0.55
         return 0.25
+    if t in AI_ADJACENT_WRONG_SPECIALIZATION_TITLES:
+        # genuinely AI/ML work, just not the JD's specific specialization —
+        # give meaningful credit here too if their career narrative shows
+        # retrieval/NLP work despite the title (some "AI Specialist" /
+        # "Computer Vision Engineer" candidates have actually pivoted into
+        # exactly the JD's domain; the title alone shouldn't bury them).
+        if any(k in feat.career_descriptions for k in
+               ("embedding", "retrieval", "semantic search", "vector search", "ranking", "nlp")):
+            return 0.65
+        return 0.40
     return 0.05
 
 
