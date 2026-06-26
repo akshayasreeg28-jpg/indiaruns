@@ -1,6 +1,6 @@
 # Redrob Hackathon — Intelligent Candidate Discovery & Ranking
 
-Team **TechNest** (Akshaya Sree G, Ponguru aasrith sairam). Ranks the top 100 candidates from a 100,000-candidate pool
+Team **TechNest** (Akshaya Sree G, Ponguru Aasrith Sairam). Ranks the top 100 candidates from a 100,000-candidate pool
 against the **Senior AI Engineer — Founding Team** job description, with
 per-candidate reasoning.
 
