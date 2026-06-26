@@ -91,7 +91,17 @@ methodology_summary: |
   requirement" language), and location (0.10, full credit for Pune/Noida,
   high credit for the JD's other named cities, a distinct Tier-1-Indian-city
   tier for Bangalore/Chennai/Kolkata/Ahmedabad per the JD's separate
-  Tier-1-city invitation, scaled by relocation willingness elsewhere).
+  Tier-1-city invitation, scaled by relocation willingness elsewhere). An
+  optional 6th component, semantic_similarity (0.15 weight when active),
+  adds cosine-similarity scoring between the JD and each candidate's career
+  narrative via a small local sentence-transformers model -- OPTIONAL,
+  falls back automatically (renormalized 5-component weights) if the model
+  isn't set up locally; rank.py never makes a network call during the timed
+  ranking run regardless. Disclosed honestly: we could not download or test
+  the actual embedding model ourselves (our dev sandbox blocks the relevant
+  download hosts), so this component's integration logic is unit-tested
+  with mocked scores and a byte-identical-fallback check, not validated
+  against the real model on the real 100K pool by us.
   Combined into a base score, then multiplied by a behavioral-availability
   modifier built from redrob_signals (recency, response rate, open_to_work,
   interview completion) and by penalty multipliers for three named risk

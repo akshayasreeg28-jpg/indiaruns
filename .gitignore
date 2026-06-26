@@ -8,3 +8,7 @@ __pycache__/
 # blow past GitHub's 100MB hard limit anyway.
 data/candidates.jsonl
 data/candidates.jsonl.gz
+
+# Semantic-similarity model (optional component) — local download, not
+# committed. See README.md "Optional: semantic similarity component".
+models/

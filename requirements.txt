@@ -1,5 +1,10 @@
-# No third-party dependencies — rank.py uses only the Python standard library
-# (json, csv, argparse, pathlib, dataclasses, datetime, re).
-# This is intentional: see README.md "Why rule-based, not embeddings/an LLM".
+# Base mode (default): no third-party dependencies — rank.py uses only the
+# Python standard library (json, csv, argparse, pathlib, dataclasses,
+# datetime, re). See README.md "Why rule-based, not embeddings/an LLM".
 #
 # Python version: 3.10+
+
+# Optional semantic-similarity component (see README.md "Optional: semantic
+# similarity component"). Uncomment and install if you want this 6th score
+# component; rank.py runs fine without it, falling back automatically.
+# sentence-transformers>=3.0.0

@@ -19,6 +19,7 @@ keeps reasoning from becoming a template across hundreds of rows.
 from .scoring import (
     CandidateFeatures, EMBEDDING_RETRIEVAL_SKILLS, VECTOR_DB_SKILLS,
     EVAL_FRAMEWORK_SKILLS, LLM_FT_SKILLS, LTR_SKILLS,
+    TARGET_LOCATIONS, TIER_1_INDIAN_CITIES,
 )
 
 
@@ -53,13 +54,36 @@ def build_reasoning(feat: CandidateFeatures, scores: dict, honeypot: list, disq:
     if ft_hits:
         parts.append(f"LLM fine-tuning exposure ({', '.join(ft_hits)})")
 
-    # Location — branch on actual country, not on the score, so the text can
-    # never claim "outside India" for an India-based candidate (a bug we
-    # caught in review: the score and the country are independent facts).
+    # Semantic similarity — only mentioned if the component was actually
+    # computed for this run (i.e. the local model was available). Reported
+    # as the real number, not a vague "high/low" label, consistent with how
+    # every other quantitative signal here is disclosed.
+    if "semantic_similarity" in scores:
+        parts.append(f"JD semantic similarity {scores['semantic_similarity']:.2f}")
+
+    # Location — branch on the actual city/country FACTS the score was
+    # computed from (set membership), never on the score's numeric value.
+    # We deliberately re-derive membership here rather than reusing
+    # scores["location"] thresholds: a generic-India-with-relocation-flag
+    # score (0.6) and a Tier-1-city-without-relocation-flag score (0.55)
+    # sit right next to each other numerically but mean different things,
+    # and branching on the number alone caused exactly this kind of
+    # mislabeling bug once already (see the "outside India" bug fixed
+    # earlier) -- caught a second instance of the same bug class here
+    # during review: Bhubaneswar (not Tier-1) was being labeled "Tier-1
+    # Indian city" purely because its willing-to-relocate score (0.6)
+    # happened to exceed the Tier-1 tier's own score range.
     loc = feat.location
+    loc_lower = loc.lower()
     is_india = feat.country.lower() == "india"
-    if scores["location"] >= 0.85:
+    is_named_welcome_city = any(t in loc_lower for t in TARGET_LOCATIONS)
+    is_tier1_city = any(t in loc_lower for t in TIER_1_INDIAN_CITIES) and not is_named_welcome_city
+
+    if is_named_welcome_city:
         parts.append(f"based in {loc} (on-site target city)")
+    elif is_tier1_city:
+        parts.append(f"based in {loc} (Tier-1 Indian city); "
+                     f"relocation flag {'set' if feat.redrob.get('willing_to_relocate') else 'not set'}")
     elif is_india:
         parts.append(f"based in {loc}, India, not a primary target city; "
                      f"relocation flag {'set' if feat.redrob.get('willing_to_relocate') else 'not set'}")

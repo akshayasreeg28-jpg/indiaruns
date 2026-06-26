@@ -12,32 +12,84 @@ python rank.py --candidates ./data/candidates.jsonl --out ./submission.csv
 python validate_submission.py ./submission.csv
 ```
 
-Runs in **~13 seconds** and **~1.3 GB peak RAM** on a 100,000-row pool —
-CPU-only, no network, no GPU. (Constraint budget: 5 min / 16 GB.)
+Runs in **~13–35 seconds** and **~1.3 GB peak RAM** on a 100,000-row pool —
+CPU-only, no network, no GPU. (Constraint budget: 5 min / 16 GB.) This works
+immediately, no setup, and is what `submission.csv` in this repo was
+generated with.
 
-There are no dependencies beyond the Python standard library — `requirements.txt`
-is intentionally empty/minimal. This was a deliberate choice (see "Why no
-embeddings model" below).
+## Optional: semantic similarity component
+
+The base mode above scores `career_substance` by phrase/keyword matching
+against career history text. That's a deliberate, defensible choice (see
+"Why rule-based" below) but it has one real limitation: a candidate who
+describes the JD's exact work in different words ("owned the personalization
+stack rewrite" vs. "built a recommendation system") can be under-scored.
+`src/semantic.py` adds an optional 6th component — real semantic similarity
+between the JD and each candidate's career narrative, via a small local
+sentence-transformers model (`all-MiniLM-L6-v2`, ~80MB) — to address this.
+
+**This component is fully optional and safe by construction.** If the model
+isn't set up, `rank.py` detects that automatically, prints a clear status
+line, and falls back to the original 5-component scoring with weights
+renormalized to sum to 1.0 — same output as if this feature didn't exist.
+No exception, no crash, no silent network call.
+
+One-time setup (run once, requires internet — this download happens
+*before* ranking, not during the timed run):
+
+```bash
+pip install sentence-transformers
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2').save('./models/all-MiniLM-L6-v2')"
+```
+
+After that, `rank.py` runs exactly as before, fully offline, and the
+console output will say `semantic_similarity active` instead of `model not
+found locally`. Use `--no-semantic` to force the original 5-component
+behavior even if the model is cached.
+
+**Honest disclosure: we could not benchmark this ourselves end-to-end.**
+Our own development sandbox's network allowlist blocks both huggingface.co
+and GitHub's release-asset CDN, so the model could never actually be
+downloaded there — we wrote and unit-tested the integration logic (weight
+switching, fallback behavior, the time-budget safety probe) with mocked
+semantic scores, and confirmed the fallback path produces byte-identical
+output to the original 5-component version, but we have not run the real
+model against the full 100K pool ourselves. `rank.py` includes a time-budget
+probe (encodes a 500-candidate sample first, extrapolates, and aborts back
+to the fallback path if projected full-pool time would exceed a 150-second
+safety budget) specifically because we couldn't verify real throughput and
+wanted a guard against blowing the 5-minute constraint on an unknown
+machine. If you run this with the model installed, please sanity-check the
+printed timing against `submission.csv`'s reproducibility before relying on
+it for the actual submission.
+
+There are no required dependencies beyond the Python standard library for
+the base mode — `requirements.txt`'s sentence-transformers/torch lines are
+commented out and optional, only needed for the semantic component.
 
 ## What this does
 
 1. Streams `candidates.jsonl` line by line (constant memory regardless of pool size).
 2. For each candidate, extracts structured features from `profile`, `career_history`,
    `skills`, and `redrob_signals`.
-3. Runs two independent integrity checks and two hard-disqualifier checks (see below).
-4. Computes 5 interpretable component scores, combines them into a base fit score,
-   then applies a multiplicative behavioral-availability modifier and any penalties.
-5. Sorts, breaks ties by `candidate_id` ascending, writes the top 100 with a
+3. Runs two independent integrity checks, two hard-disqualifier checks, and a
+   softer title-chasing check (see below).
+4. Computes 5 interpretable rule-based component scores. If the optional
+   semantic model is set up (see above), batch-encodes every candidate's
+   career narrative against the JD for a 6th component.
+5. Combines components into a base fit score, then applies a multiplicative
+   behavioral-availability modifier and any penalties.
+6. Sorts, breaks ties by `candidate_id` ascending, writes the top 100 with a
    real, candidate-specific reasoning string for each row.
 
-## Why rule-based, not embeddings/an LLM
+## Why rule-based first, with an optional semantic layer
 
 The JD explicitly states the role wants someone who can ship something
 "obviously suboptimal" quickly and reason about latency/quality tradeoffs,
-and the compute constraints (CPU-only, 5 min, no network) rule out per-candidate
-LLM calls outright for a 100K pool. Given that, a transparent, debuggable,
-rule-based system has three real advantages over a black-box embedding
-similarity score for *this specific JD*:
+and the compute constraints (CPU-only, 5 min, no network *during ranking*)
+rule out per-candidate LLM calls outright for a 100K pool. Given that, a
+transparent, debuggable, rule-based system has three real advantages over a
+black-box embedding similarity score for *this specific JD*:
 
 - **The JD is mostly disqualifier logic, not similarity.** "We will not move
   forward if X" is much easier to express as an explicit rule than to hope a
@@ -48,25 +100,32 @@ similarity score for *this specific JD*:
   reasoning per row instead of an LLM post-hoc rationalizing a black-box score.
 - **It is the most defensible architecture in a Stage 5 interview.** Every
   score is traceable to a specific field in the candidate JSON. There is no
-  "the model decided this" step that I, personally, couldn't explain.
+  "the model decided this" step we couldn't explain.
 
-The tradeoff (and we're explicit about this rather than pretending otherwise):
-a learned ranker over precomputed local embeddings (e.g. a small sentence-transformers
-model run once, offline, to build a similarity feature, separate from any
-per-candidate LLM call) would likely do better at catching paraphrased synonyms
-("led the recommendation system rewrite" vs. "owned ranking architecture")
-that this keyword/phrase-based version can miss. That's the most natural next
-iteration; see "Honest limitations" below.
+The known tradeoff with a purely phrase-based approach is that it can miss
+paraphrased synonyms ("led the recommendation system rewrite" vs. "owned
+ranking architecture"). We addressed this with `src/semantic.py` — an
+**optional** 6th component using a small local sentence-transformers model
+(see "Optional: semantic similarity component" above) — rather than leaving
+it as a stated limitation. It's optional and additive, not a replacement,
+specifically so the three advantages above still hold for the 5 rule-based
+components even when the semantic layer is active: the semantic score is
+disclosed in the reasoning text as a real number, gets a modest 0.15 weight
+so it can't single-handedly override the rule-based signals, and the whole
+system degrades safely to the original 5-component version if the model
+isn't set up — see the disclosure in that section about what we could and
+couldn't verify ourselves.
 
 ## Scoring architecture
 
-| Component | Weight | What it captures |
+| Component | Weight (no semantic / with semantic) | What it captures |
 |---|---|---|
-| `title_fit` | 0.32 | Is the current title actually AI/ML/data, not an adjacent or unrelated role with AI keywords bolted onto the skills list. Heaviest weight — this is the direct defense against the "keyword stuffer" trap named in the hackathon README. Three tiers below "core": adjacent titles (Software/Data/Backend/Analytics Engineer, Data Analyst), AI-titled-but-wrong-specialization (AI Specialist, Computer Vision Engineer — real ML work, just not retrieval/NLP), and everything else. |
-| `career_substance` | 0.23 | Keyword/phrase hits inside `career_history[].description` (e.g. "embedding", "retrieval", "production", "A/B test") — rewards candidates who *describe having built* the JD's core systems, not just listed them as skills. |
-| `skills_trust` | 0.23 | Skills score discounted by an endorsement+duration "trust" factor, so a skill claimed at `expert` with 0 months used / 0 endorsements counts far less than the same skill backed by real tenure. Weighted toward the JD's "things you absolutely need" (embeddings, vector DB, Python, eval frameworks) over "nice to have" (fine-tuning, learning-to-rank). |
-| `location` | 0.10 | Full credit for Pune/Noida (named office cities), high credit for the JD's 4 other named "welcome" cities, a distinct Tier-1-Indian-city tier (Bangalore, Chennai, Kolkata, Ahmedabad — the JD separately invites "Tier-1 Indian city" relocators, not just the 4 named cities), reduced for elsewhere in India or abroad scaled by `willing_to_relocate`, since the JD does not sponsor visas. |
-| `experience_band` | 0.12 | Soft-scored around the JD's 5–9yr range; full credit in-band, graduated partial credit outside it. Floor is 0.35, not a near-zero — the JD explicitly says this "is a range, not a requirement" and it will "seriously consider candidates outside the band if other signals are strong," so this component is deliberately kept from dominating the score for an otherwise excellent candidate. |
+| `title_fit` | 0.32 / 0.28 | Is the current title actually AI/ML/data, not an adjacent or unrelated role with AI keywords bolted onto the skills list. Heaviest weight — this is the direct defense against the "keyword stuffer" trap named in the hackathon README. Three tiers below "core": adjacent titles (Software/Data/Backend/Analytics Engineer, Data Analyst), AI-titled-but-wrong-specialization (AI Specialist, Computer Vision Engineer — real ML work, just not retrieval/NLP), and everything else. |
+| `career_substance` | 0.23 / 0.20 | Keyword/phrase hits inside `career_history[].description` (e.g. "embedding", "retrieval", "production", "A/B test") — rewards candidates who *describe having built* the JD's core systems, not just listed them as skills. |
+| `skills_trust` | 0.23 / 0.20 | Skills score discounted by an endorsement+duration "trust" factor, so a skill claimed at `expert` with 0 months used / 0 endorsements counts far less than the same skill backed by real tenure. Weighted toward the JD's "things you absolutely need" (embeddings, vector DB, Python, eval frameworks) over "nice to have" (fine-tuning, learning-to-rank). |
+| `location` | 0.10 / 0.07 | Full credit for Pune/Noida (named office cities), high credit for the JD's 4 other named "welcome" cities, a distinct Tier-1-Indian-city tier (Bangalore, Chennai, Kolkata, Ahmedabad — the JD separately invites "Tier-1 Indian city" relocators, not just the 4 named cities), reduced for elsewhere in India or abroad scaled by `willing_to_relocate`, since the JD does not sponsor visas. |
+| `semantic_similarity` | n/a / 0.15 | **Optional.** Cosine similarity between a sentence-transformers embedding of the JD's technical summary and each candidate's `career_history` description text. Only active if the local model is set up (see above); falls back cleanly otherwise. |
+| `experience_band` | 0.12 / 0.10 | Soft-scored around the JD's 5–9yr range; full credit in-band, graduated partial credit outside it. Floor is 0.35, not a near-zero — the JD explicitly says this "is a range, not a requirement" and it will "seriously consider candidates outside the band if other signals are strong," so this component is deliberately kept from dominating the score for an otherwise excellent candidate. |
 
 `final_score = (Σ weight·component) × behavioral_multiplier × honeypot_penalty × disqualifier_penalty`
 
@@ -224,12 +283,18 @@ intentionally don't override.
 
 ## Honest limitations (what we'd improve with more time)
 
-- **Phrase matching beats true semantic understanding.** `career_substance`
-  is keyword/phrase-based, so a candidate who describes the exact same work
-  with very different vocabulary could be under-scored. The natural fix is a
-  small, locally-run sentence-transformers model (still CPU-only, still no
-  network) to get a JD–career-history similarity feature as an additional
-  signal — this is the first thing we'd add given more time.
+- **The semantic component is implemented but unverified end-to-end by us.**
+  `career_substance` alone is keyword/phrase-based, so a candidate who
+  describes the exact same work with very different vocabulary could be
+  under-scored on that component specifically. We addressed this with the
+  optional `src/semantic.py` layer rather than leaving it as a stated gap —
+  but we could not download or run the actual sentence-transformers model
+  in our own development sandbox (network allowlist blocks both
+  huggingface.co and GitHub's release-asset CDN), so the integration logic
+  is unit-tested with mocked scores, not validated against the real model
+  on the real 100K pool by us. If you run it with the model installed, the
+  console's projected-time output is worth checking before trusting it for
+  the final submission.
 - **Disqualifier rules are necessarily approximate.** "Consulting-only career"
   and "CV/speech-only" are pattern matches against the JD's explicit language,
   not a learned model — they will have false positives/negatives at the margins.
@@ -257,17 +322,21 @@ We verified the `.gz` and uncompressed paths produce byte-identical output.
 
 
 
+## Repository layout
+
 ```
 .
 ├── rank.py                       # entry point
 ├── src/
-│   ├── scoring.py                # feature extraction + component scores + honeypot/disqualifier logic
-│   └── reasoning.py               # per-row reasoning string builder
+│   ├── scoring.py                 # feature extraction + component scores + honeypot/disqualifier logic
+│   ├── reasoning.py               # per-row reasoning string builder
+│   └── semantic.py                # optional semantic-similarity component (local sentence-transformers)
+├── models/
+│   └── all-MiniLM-L6-v2/          # NOT committed — created by the one-time setup step, see "Optional" above
 ├── data/
-│   ├── candidates.jsonl           # full 100K pool (as released)
+│   ├── candidates.jsonl           # full 100K pool (as released) — NOT committed, see "Data" below
 │   └── candidate_schema.json
-├── sandbox/
-│   └── sample_run.py              # small-sample (<=100 candidates) demo for the hosted sandbox
+├── hf_space/                      # standalone HuggingFace Spaces sandbox demo (same scoring code, 80-candidate sample)
 ├── validate_submission.py         # organizer-provided validator (unmodified)
 ├── submission.csv                 # final output
 ├── submission_metadata.yaml
