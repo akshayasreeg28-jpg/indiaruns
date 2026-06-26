@@ -87,8 +87,11 @@ methodology_summary: |
   duration evidence factor with no guaranteed floor, so a fabricated "expert"
   claim with 0 months/0 endorsements scores near zero rather than getting
   automatic partial credit), experience_band (0.12, soft-scored around the
-  JD's 5-9yr range), and location (0.10, full credit for Pune/Noida, partial
-  for other JD-named cities, scaled by relocation willingness elsewhere).
+  JD's 5-9yr range, floor raised to 0.35 per the JD's explicit "range not a
+  requirement" language), and location (0.10, full credit for Pune/Noida,
+  high credit for the JD's other named cities, a distinct Tier-1-Indian-city
+  tier for Bangalore/Chennai/Kolkata/Ahmedabad per the JD's separate
+  Tier-1-city invitation, scaled by relocation willingness elsewhere).
   Combined into a base score, then multiplied by a behavioral-availability
   modifier built from redrob_signals (recency, response rate, open_to_work,
   interview completion) and by penalty multipliers for three named risk

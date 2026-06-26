@@ -87,6 +87,19 @@ CONSULTING_FIRMS = {
 
 TARGET_LOCATIONS = {"pune", "noida", "hyderabad", "mumbai", "delhi", "delhi ncr", "gurugram", "gurgaon"}
 
+# JD: "Open to relocation candidates from Tier-1 Indian cities" — a broader,
+# separate invitation from the 4 explicitly-named welcome cities above.
+# Standard real-world Tier-1 classification for Indian metros. Bangalore and
+# Chennai matter most here: both are unambiguously Tier-1 and present in the
+# dataset (Bangalore: 4238 candidates, Chennai: 4164), but neither is one of
+# the JD's 4 named cities, so without this set they'd fall to the same
+# generic-India bucket as places like Bhubaneswar or Trivandrum — treating
+# a Bangalore candidate the same as someone from a non-Tier-1 city
+# contradicts the JD's own explicit invitation.
+TIER_1_INDIAN_CITIES = {
+    "bangalore", "bengaluru", "chennai", "kolkata", "ahmedabad",
+} | TARGET_LOCATIONS
+
 LANGCHAIN_ONLY_MARKERS = {"langchain"}
 
 
@@ -350,14 +363,25 @@ def score_skills_with_trust(feat: CandidateFeatures) -> float:
 
 
 def score_experience_band(feat: CandidateFeatures) -> float:
+    # JD's own words: "this is a range, not a requirement... we'll seriously
+    # consider candidates outside the band if other signals are strong."
+    # The floor here was originally 0.15, which (at this component's 0.12
+    # weight) could swing ~22% of the typical top-100 competitive score
+    # range purely on years-of-experience for an otherwise near-perfect
+    # candidate — more leverage than the JD's explicit anti-credentialist
+    # framing justifies. Raised the floor to 0.35 so a candidate well
+    # outside the band still has to earn their way in on title/career/
+    # skills substance (as the JD says they should be able to), rather than
+    # being structurally capped low by this one component regardless of
+    # how strong everything else is.
     yoe = feat.yoe
     if 5 <= yoe <= 9:
         return 1.0
     if 4 <= yoe < 5 or 9 < yoe <= 11:
         return 0.7
     if 3 <= yoe < 4 or 11 < yoe <= 13:
-        return 0.4
-    return 0.15
+        return 0.5
+    return 0.35
 
 
 def score_location(feat: CandidateFeatures) -> float:
@@ -367,6 +391,14 @@ def score_location(feat: CandidateFeatures) -> float:
         return 1.0
     if any(t in loc for t in TARGET_LOCATIONS):
         return 0.85
+    if any(t in loc for t in TIER_1_INDIAN_CITIES):
+        # JD explicitly invites Tier-1 city candidates to relocate; this is
+        # a real, distinct invitation from "any India candidate", so it
+        # earns more than the generic-India fallback below even without a
+        # relocation flag, and the relocation flag bumps it further since
+        # that's the concrete signal the JD is actually asking for.
+        willing = feat.redrob.get("willing_to_relocate", False)
+        return 0.75 if willing else 0.55
     if country == "india":
         willing = feat.redrob.get("willing_to_relocate", False)
         return 0.6 if willing else 0.4

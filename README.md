@@ -65,8 +65,8 @@ iteration; see "Honest limitations" below.
 | `title_fit` | 0.32 | Is the current title actually AI/ML/data, not an adjacent or unrelated role with AI keywords bolted onto the skills list. Heaviest weight — this is the direct defense against the "keyword stuffer" trap named in the hackathon README. Three tiers below "core": adjacent titles (Software/Data/Backend/Analytics Engineer, Data Analyst), AI-titled-but-wrong-specialization (AI Specialist, Computer Vision Engineer — real ML work, just not retrieval/NLP), and everything else. |
 | `career_substance` | 0.23 | Keyword/phrase hits inside `career_history[].description` (e.g. "embedding", "retrieval", "production", "A/B test") — rewards candidates who *describe having built* the JD's core systems, not just listed them as skills. |
 | `skills_trust` | 0.23 | Skills score discounted by an endorsement+duration "trust" factor, so a skill claimed at `expert` with 0 months used / 0 endorsements counts far less than the same skill backed by real tenure. Weighted toward the JD's "things you absolutely need" (embeddings, vector DB, Python, eval frameworks) over "nice to have" (fine-tuning, learning-to-rank). |
-| `experience_band` | 0.12 | Soft scoring around the JD's 5–9 yr band, full credit in-band, partial credit just outside it (the JD itself says the band is "a range, not a requirement"). |
-| `location` | 0.10 | Full credit for Pune/Noida (named office cities), partial for other JD-named "welcome" cities, reduced for elsewhere in India or abroad scaled by `willing_to_relocate`, since the JD does not sponsor visas. |
+| `location` | 0.10 | Full credit for Pune/Noida (named office cities), high credit for the JD's 4 other named "welcome" cities, a distinct Tier-1-Indian-city tier (Bangalore, Chennai, Kolkata, Ahmedabad — the JD separately invites "Tier-1 Indian city" relocators, not just the 4 named cities), reduced for elsewhere in India or abroad scaled by `willing_to_relocate`, since the JD does not sponsor visas. |
+| `experience_band` | 0.12 | Soft-scored around the JD's 5–9yr range; full credit in-band, graduated partial credit outside it. Floor is 0.35, not a near-zero — the JD explicitly says this "is a range, not a requirement" and it will "seriously consider candidates outside the band if other signals are strong," so this component is deliberately kept from dominating the score for an otherwise excellent candidate. |
 
 `final_score = (Σ weight·component) × behavioral_multiplier × honeypot_penalty × disqualifier_penalty`
 
@@ -175,6 +175,52 @@ detection, or time-series forecasting work, with the relevant skill present
 only as a listed keyword, not work they describe having done. This matches
 the keyword-stuffer pattern (skill claimed, not evidenced) rather than a
 true negative, so no change was made here — the gate is working as intended.
+
+## Location and experience-band review
+
+The dataset's location field is also a small fixed vocabulary (18 Indian
+cities, 8 countries) — checked it exhaustively the same way as titles. Found
+that **Bangalore and Chennai** (4,238 and 4,164 candidates respectively, both
+unambiguously Tier-1 Indian metros) were falling into the same generic
+"India" bucket as smaller cities like Trivandrum or Bhubaneswar, even though
+the JD separately and explicitly says it's *"open to relocation candidates
+from Tier-1 Indian cities"* — a broader invitation than just the 4 cities it
+names directly (Hyderabad, Pune, Mumbai, Delhi NCR). Added a distinct
+Tier-1-city tier (Bangalore, Chennai, Kolkata, Ahmedabad) between the named
+welcome cities and the generic-India fallback. Result: 4/100 rankings
+changed, including a Recommendation Systems Engineer at Zomato (FAISS,
+embeddings, semantic search) who'd been undervalued purely on a Chennai
+address.
+
+Separately, re-read the JD's own framing on experience — *"this is a range,
+not a requirement... we'll seriously consider candidates outside the band if
+other signals are strong"* — and concluded the `experience_band` component's
+original 0.15 floor was too punishing relative to that explicit
+anti-credentialist language: at this component's 0.12 weight, the gap
+between in-band and the floor was eating roughly a fifth of the typical
+top-100 competitive score spread, on a criterion the JD itself says
+shouldn't be a hard filter. Raised the floor to 0.35. This was a real
+principle fix but turned out to be a no-op on the current top 100 in this
+run — the one strong 16+ year candidate we found who'd plausibly benefit
+(a Senior AI Engineer-equivalent at Flipkart, real ranking-system career
+history, strong skills) is still correctly excluded because their
+`open_to_work_flag` is `False`, which is a genuine availability signal we
+intentionally don't override.
+
+**Two enhancement ideas we considered and explicitly rejected:**
+- *Using `current_industry`* (e.g. "AI/ML", "Conversational AI" tags) as a
+  new scoring component. Checked it against the existing components first:
+  the 40 candidates with an AI-native industry tag but low `title_fit` are
+  the same population already correctly identified via career-history
+  inspection as doing CV/fraud-detection/forecasting work, not retrieval —
+  industry tag didn't add independent signal beyond what title and career
+  substance already capture, so we didn't add the complexity.
+- *A dedicated "early-stage-startup-hopper" rule*, since the JD explicitly
+  says people who've only bounced between early-stage startups avoiding
+  process/structure aren't a fit. Checked the data: only 9 candidates in
+  the entire 100K pool have 3+ roles entirely at sub-50-person companies,
+  none with AI/ML titles. Too rare to matter for this dataset and would be
+  dead code, so we documented the check instead of building the rule.
 
 ## Honest limitations (what we'd improve with more time)
 
